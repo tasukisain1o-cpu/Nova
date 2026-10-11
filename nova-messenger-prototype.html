@@ -1,0 +1,71 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#101014">
+<title>NOVA — личное пространство</title>
+<style>
+:root{--bg:#101014;--panel:#18181f;--panel2:#20202a;--line:#2b2b36;--text:#f5f4f8;--muted:#a3a1b1;--accent:#c4a7ff;--accent2:#9c7bff;--green:#8ee7c2}
+*{box-sizing:border-box}body{margin:0;background:radial-gradient(ellipse at 90% 0%,#29213d 0%,transparent 38%),var(--bg);color:var(--text);font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;min-height:100vh}
+button,input{font:inherit}button{cursor:pointer}.app{max-width:1180px;margin:auto;min-height:100vh;padding:18px;display:grid;grid-template-columns:76px 330px minmax(0,1fr);gap:14px}
+.rail,.sidebar,.chat{background:rgba(24,24,31,.9);border:1px solid var(--line);border-radius:25px;backdrop-filter:blur(18px);min-height:calc(100vh - 36px)}
+.rail{padding:16px 10px;display:flex;align-items:center;flex-direction:column;gap:16px}.logo{width:44px;height:44px;border-radius:16px;background:linear-gradient(135deg,#e0d0ff,#8e6bff);color:#211536;display:grid;place-items:center;font-weight:900;font-size:20px;box-shadow:0 7px 30px #9c7bff30;margin-bottom:16px}.railbtn{border:0;background:transparent;color:var(--muted);width:46px;height:46px;border-radius:15px;font-size:20px}.railbtn.active,.railbtn:hover{background:#302742;color:#e5d9ff}.railbottom{margin-top:auto}
+.sidebar{padding:24px 16px;display:flex;flex-direction:column;gap:18px}.brandline{display:flex;justify-content:space-between;align-items:center}.eyebrow{font-size:11px;letter-spacing:2px;color:var(--accent);font-weight:800}.brandline h1{font-size:24px;margin:5px 0 0;letter-spacing:-1px}.newbtn{border:1px solid #51446d;background:#2a2238;color:#e9ddff;border-radius:13px;width:42px;height:42px;font-size:23px}.intro{color:var(--muted);font-size:13px;line-height:1.5;margin-top:-10px}.search{display:flex;align-items:center;gap:9px;background:#111116;border:1px solid var(--line);border-radius:14px;padding:0 13px}.search input{background:transparent;border:0;outline:0;color:var(--text);width:100%;padding:13px 0}.sectiontitle{font-size:11px;letter-spacing:1.6px;color:var(--muted);font-weight:800;margin:2px 0 0}.chatlist{display:flex;flex-direction:column;gap:6px}.chatitem{display:flex;gap:12px;align-items:center;text-align:left;background:transparent;border:1px solid transparent;color:inherit;padding:12px 10px;border-radius:17px;width:100%}.chatitem.active{background:#292333;border-color:#40334f}.avatar{width:46px;height:46px;flex-shrink:0;border-radius:17px;display:grid;place-items:center;font-weight:800;color:#21172c;background:linear-gradient(135deg,#f0c6d6,#c7b5ff);position:relative}.avatar.blue{background:linear-gradient(135deg,#b7e6f6,#9f9aff)}.avatar.green{background:linear-gradient(135deg,#b7f0d8,#84b9a7)}.avatar.orange{background:linear-gradient(135deg,#ffd5a7,#eea1a7)}.online{position:absolute;width:11px;height:11px;border:2px solid var(--panel);background:var(--green);border-radius:50%;right:-2px;bottom:-1px}.chatmeta{min-width:0;flex:1}.chatrow{display:flex;justify-content:space-between;gap:8px}.chatname{font-weight:700;font-size:14px}.time{color:var(--muted);font-size:11px;white-space:nowrap}.preview{color:var(--muted);font-size:12px;margin-top:6px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.tag{font-size:10px;border-radius:7px;padding:4px 6px;background:#3b3050;color:#d8c7ff}
+.chat{display:flex;flex-direction:column;overflow:hidden;position:relative}.chathead{padding:20px 24px;border-bottom:1px solid var(--line);display:flex;align-items:center;gap:13px}.chathead .avatar{width:42px;height:42px}.headinfo{flex:1}.headname{font-weight:800}.status{font-size:12px;color:var(--green);margin-top:4px}.headactions{display:flex;gap:8px}.iconbtn{border:1px solid var(--line);background:#202029;color:#d6d2e2;border-radius:13px;width:40px;height:40px;font-size:17px}.messages{padding:24px;display:flex;flex-direction:column;gap:13px;overflow:auto;flex:1;min-height:300px;background:radial-gradient(ellipse at 50% 100%,#211a2e30,transparent 45%)}.day{text-align:center;color:var(--muted);font-size:11px;margin:3px 0 8px}.bubble{max-width:min(78%,430px);padding:12px 14px;border-radius:18px;background:#25252f;border:1px solid #30303b;font-size:14px;line-height:1.45;align-self:flex-start;overflow-wrap:anywhere}.bubble.mine{align-self:flex-end;background:linear-gradient(135deg,#51406f,#3b2d51);border-color:#645181;border-bottom-right-radius:6px}.bubble:not(.mine){border-bottom-left-radius:6px}.btime{font-size:10px;color:#c0b7d1;text-align:right;margin-top:6px}.sender{font-size:11px;color:var(--accent);font-weight:700;margin-bottom:4px}.composer{padding:16px 20px 20px;border-top:1px solid var(--line);display:flex;gap:10px;align-items:center;background:#17171d}.attach{width:42px;height:42px;border-radius:14px;border:1px solid var(--line);background:#24242d;color:#d3c5ef;font-size:19px}.composeinput{flex:1;min-width:0;background:#101015;border:1px solid var(--line);border-radius:15px;padding:13px 15px;color:var(--text);outline:none}.composeinput:focus{border-color:#79619e}.send{height:44px;padding:0 17px;border:0;border-radius:14px;background:linear-gradient(135deg,#d9c7ff,#a68aff);color:#21152f;font-weight:800}.notice{font-size:11px;color:var(--muted);padding:0 20px 12px;background:#17171d}.mobiletop{display:none}.toast{position:fixed;bottom:24px;left:50%;transform:translateX(-50%);padding:12px 16px;border-radius:14px;background:#292333;border:1px solid #51446d;color:#f0e7ff;font-size:13px;display:none;z-index:10;max-width:90vw}.empty{color:var(--muted);font-size:13px;padding:20px;text-align:center}
+@media(max-width:820px){.app{display:block;padding:0;min-height:100dvh}.rail{display:none}.sidebar,.chat{border-radius:0;min-height:100dvh;border:0}.sidebar{padding:22px 16px 100px}.chat{display:none;position:fixed;inset:0;z-index:5;min-height:100dvh}.chat.mobileopen{display:flex}.chathead{padding-top:calc(14px + env(safe-area-inset-top))}.mobiletop{display:block}.back{display:inline-grid;place-items:center;border:0;background:transparent;color:var(--text);font-size:23px;width:30px}.messages{padding:18px 14px}.composer{padding-bottom:calc(12px + env(safe-area-inset-bottom));padding-left:12px;padding-right:12px}.notice{padding-bottom:10px}.bubble{max-width:86%}.headactions .iconbtn:nth-child(2){display:none}}
+</style>
+</head>
+<body>
+<div class="app">
+  <nav class="rail" aria-label="Основная навигация">
+    <div class="logo">N</div>
+    <button class="railbtn active" title="Чаты" onclick="toast('Ты уже в разделе чатов')">◌</button>
+    <button class="railbtn" title="Звонки" onclick="toast('Звонки добавим на следующем этапе')">⌁</button>
+    <button class="railbtn" title="Контакты" onclick="toast('Контакты скоро появятся')">♙</button>
+    <button class="railbtn" title="Приватность" onclick="toast('Настройки приватности подключим до запуска')">⛨</button>
+    <button class="railbtn railbottom" title="Настройки" onclick="toast('Настройки появятся позже')">⚙</button>
+  </nav>
+  <aside class="sidebar">
+    <div class="brandline"><div><div class="eyebrow">YOUR PRIVATE UNIVERSE</div><h1>NOVA<span style="color:var(--accent)">.</span></h1></div><button class="newbtn" onclick="toast('Создание новых чатов подключим после настройки аккаунтов')" aria-label="Новый чат">＋</button></div>
+    <div class="intro">Меньше шума. Больше близости.<br>Твоё пространство для своих.</div>
+    <label class="search"><span>⌕</span><input id="search" placeholder="Найти разговор..." oninput="filterChats()" aria-label="Поиск чатов"></label>
+    <div class="sectiontitle">ТВОИ РАЗГОВОРЫ <span style="float:right">03</span></div>
+    <div class="chatlist" id="chatlist">
+      <button class="chatitem active" data-id="vera" onclick="openChat('vera')"><div class="avatar">В<span class="online"></span></div><div class="chatmeta"><div class="chatrow"><span class="chatname">Вера</span><span class="time">сейчас</span></div><div class="preview" id="prev-vera">это наше маленькое место ✨</div></div><span class="tag">♡</span></button>
+      <button class="chatitem" data-id="friends" onclick="openChat('friends')"><div class="avatar blue">Д</div><div class="chatmeta"><div class="chatrow"><span class="chatname">Свои люди</span><span class="time">18:42</span></div><div class="preview" id="prev-friends">Даня: ну что, собираемся?</div></div></button>
+      <button class="chatitem" data-id="notes" onclick="openChat('notes')"><div class="avatar green">✧</div><div class="chatmeta"><div class="chatrow"><span class="chatname">Избранное</span><span class="time">вчера</span></div><div class="preview" id="prev-notes">Идеи, ссылки и важное</div></div></button>
+    </div>
+    <div style="margin-top:auto;padding:16px 8px 0;border-top:1px solid var(--line);display:flex;align-items:center;gap:11px"><div class="avatar orange" style="width:38px;height:38px;border-radius:14px">С</div><div><div style="font-weight:700;font-size:13px">Твой профиль</div><div style="font-size:11px;color:var(--muted);margin-top:4px">Личное пространство</div></div><span style="margin-left:auto;color:var(--muted)">···</span></div>
+  </aside>
+  <main class="chat" id="chat">
+    <header class="chathead"><button class="back mobiletop" onclick="closeChat()" aria-label="Назад">‹</button><div class="avatar" id="headavatar">В<span class="online"></span></div><div class="headinfo"><div class="headname" id="headname">Вера</div><div class="status" id="headstatus">● в сети</div></div><div class="headactions"><button class="iconbtn" onclick="toast('Голосовые и видеозвонки подключим отдельным этапом')" aria-label="Позвонить">⌁</button><button class="iconbtn" onclick="toast('Информация о чате появится позже')" aria-label="Информация">ⓘ</button></div></header>
+    <section class="messages" id="messages" aria-live="polite"></section>
+    <form class="composer" id="composer"><button class="attach" type="button" onclick="toast('Отправку фотографий подключим после настройки хранилища')" aria-label="Прикрепить файл">＋</button><input class="composeinput" id="messageInput" autocomplete="off" placeholder="Написать что-то тёплое..." aria-label="Текст сообщения"><button class="send" type="submit">➤</button></form>
+    <div class="notice">✦ Сейчас это интерактивный макет. Сообщения сохраняются только в открытой странице.</div>
+  </main>
+</div>
+<div class="toast" id="toast"></div>
+<script>
+const data={
+ vera:{name:"Вера",initial:"В",color:"",status:"● в сети",placeholder:"Написать что-то тёплое...",messages:[
+ {text:"эй, привет 🤍",time:"20:14",mine:false},
+ {text:"я тут подумал — хочется, чтобы у нас было своё маленькое место, только для своих",time:"20:15",mine:true},
+ {text:"это наше маленькое место ✨",time:"20:16",mine:false}]},
+ friends:{name:"Свои люди",initial:"Д",color:"blue",status:"3 участника",placeholder:"Написать своим...",messages:[
+ {text:"Даня: ну что, собираемся?",time:"18:42",mine:false},
+ {text:"Я за, давайте решим время",time:"18:43",mine:true}]},
+ notes:{name:"Избранное",initial:"✧",color:"green",status:"Только для тебя",placeholder:"Сохрани мысль...",messages:[
+ {text:"Идеи, ссылки и важное — всё в одном месте.",time:"вчера",mine:false}]}
+};
+let current="vera";
+function render(){const d=data[current];document.getElementById("headname").textContent=d.name;document.getElementById("headstatus").textContent=d.status;document.getElementById("headavatar").className="avatar "+d.color;document.getElementById("headavatar").textContent=d.initial;document.getElementById("messageInput").placeholder=d.placeholder;const box=document.getElementById("messages");box.innerHTML='<div class="day">СЕГОДНЯ · ТВОЁ ПРОСТРАНСТВО</div>';d.messages.forEach(m=>{const el=document.createElement("div");el.className="bubble"+(m.mine?" mine":"");const t=document.createElement("div");t.textContent=m.text;el.appendChild(t);const tm=document.createElement("div");tm.className="btime";tm.textContent=m.time+(m.mine?"  ✓":"");el.appendChild(tm);box.appendChild(el)});box.scrollTop=box.scrollHeight;document.querySelectorAll(".chatitem").forEach(b=>b.classList.toggle("active",b.dataset.id===current))}
+function openChat(id){current=id;render();if(innerWidth<=820)document.getElementById("chat").classList.add("mobileopen")}
+function closeChat(){document.getElementById("chat").classList.remove("mobileopen")}
+document.getElementById("composer").addEventListener("submit",e=>{e.preventDefault();const input=document.getElementById("messageInput");const text=input.value.trim();if(!text)return;const now=new Date();data[current].messages.push({text,time:now.toLocaleTimeString("ru-RU",{hour:"2-digit",minute:"2-digit"}),mine:true});const preview=document.getElementById("prev-"+current);if(preview)preview.textContent=text;input.value="";render()});
+function filterChats(){const q=document.getElementById("search").value.toLowerCase();document.querySelectorAll(".chatitem").forEach(b=>b.style.display=b.innerText.toLowerCase().includes(q)?"flex":"none")}
+let toastTimer;function toast(msg){const el=document.getElementById("toast");el.textContent=msg;el.style.display="block";clearTimeout(toastTimer);toastTimer=setTimeout(()=>el.style.display="none",2600)}
+render();if(innerWidth>820)document.getElementById("chat").style.display="flex";
+</script>
+</body>
+</html>
