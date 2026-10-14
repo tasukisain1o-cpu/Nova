@@ -12,6 +12,7 @@ Single-file web messenger: HTML, CSS and JavaScript in `index.html`. Hosted at h
 - Feed of subscribed channel posts and followed profiles, optional topic-based recommendations, comments and likes; stories expire after 24 hours; video Clips.
 - Profile, avatar, four two-color themes without purple, synced privacy/notification/interests settings, follow requests and blocks.
 - Responsive desktop layout and four-section mobile navigation.
+- Owner dashboard: aggregate statistics, report queues and an immutable status-change audit. Profiles, messages, posts, stories and Clips have report actions. Closing a report does not remove content.
 
 ## Database
 
@@ -33,8 +34,10 @@ Supabase Auth Site URL and allowed redirect: `https://tasukisain1o-cpu.github.io
 - Browser checks: real library loads, login/registration/recovery screens; mobile registration at 390×844; main navigation, profile/theme, chat text escaping and send behavior with a local-only fixture (never published).
 - Actual database transaction tests: bootstrap, membership isolation, channel publication permissions, blocked dialogs, private follows/media, immutable message identity, anonymous denial; fixtures rolled back. Additional v1.2 tests cover chat list membership isolation and interest normalization/deduplication.
 - Actual end-to-end login and two-user message/media delivery still need testing with user-created accounts. No real password was created by the agent.
-- Supabase's default email delivery is still configured. Set up custom SMTP before inviting general users. Default delivery has recipient/rate restrictions. Keep confirmation enabled. Provider credentials must be entered by the owner, outside repository code.
-- No production push notifications, live broadcasts, audio/video calls, phone/SMS authentication, or owner admin interface yet. Broadcast metadata in the database does not implement a streaming service. No end-to-end encryption is claimed.
+- The owner configured Gmail SMTP and registered a confirmed app account. Provider quotas still apply. Keep confirmation enabled. Provider credentials stay outside repository code.
+- No production push notifications, live broadcasts, audio/video calls or phone/SMS authentication yet. Broadcast metadata does not implement a streaming service. No end-to-end encryption is claimed.
+- Apply `database/20261014_nova_v1_3.sql` after v1.2 for the owner dashboard. Access is checked inside protected database functions. No private conversation contents or Auth credentials are exposed. Role assignment is a separate owner operation, never a frontend bootstrap.
+- `database/test_admin_v1_3.sql` passed actual database checks for admin/member isolation, self-promotion denial, report transitions, auditing and anonymous denial in a rolled-back transaction. Local UI fixtures are never published.
 - Feed currently loads the latest 50 posts and Clips the latest 20 videos; older social pagination is future work. Channel publications are made through the feed composer by selecting the channel. Chat messages are a separate data model.
 - Media links are short-lived signed URLs; active pages refresh images and renew paused/failed audio/video URLs. Already-issued links remain usable until expiry.
 - Add server-side rate limits/moderation, storage cleanup for abandoned uploads, backup/restore drills and observability before a broad production release.
