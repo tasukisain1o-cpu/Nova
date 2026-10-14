@@ -1,0 +1,42 @@
+# NOVA
+
+Single-file web messenger: HTML, CSS and JavaScript in `index.html`. Hosted at https://tasukisain1o-cpu.github.io/Nova/ and connected to Supabase project `xpdqwkenfckaghszybfk`.
+
+## Implemented
+
+- Email registration, confirmation, login, password recovery, email/password changes and sign-out on all devices through Supabase Auth.
+- Empty new accounts; no seeded demo conversations or local-only messages.
+- Personal dialogs, groups, channels, username search, invitations, channel subscriptions, member roles and mute settings.
+- Realtime text messages, replies, edits, deletion and paginated message history. Client IDs make text retries idempotent.
+- Private uploads, images, files, voice messages and round videos via MediaRecorder where supported. Recordings stop after 60 seconds. Camera/microphone require the user's browser permission.
+- Feed of subscribed channel posts and followed profiles, optional topic-based recommendations, comments and likes; stories expire after 24 hours; video Clips.
+- Profile, avatar, four two-color themes without purple, synced privacy/notification/interests settings, follow requests and blocks.
+- Responsive desktop layout and four-section mobile navigation.
+
+## Database
+
+Applied upgrade order: `database/20261014_nova_v1.sql`, `database/20261014_nova_v1_1.sql`, `database/20261014_nova_v1_2.sql`. These upgrade the original project's eight draft tables. The first migration is not a blank-database bootstrap. Read `database/README.md` before restoring or modifying the schema.
+
+All 23 public tables have RLS. Three media buckets are private. The browser contains only the public publishable key. Never add a secret/service-role key to frontend code or GitHub.
+
+The v1.2 invoker RPCs provide an RLS-filtered chat list and atomic replacement of the current user's interests. Realtime is enabled on 12 tables. App admin membership is held in a protected private table and is currently unassigned; GitHub or Supabase ownership does not automatically create an app account.
+
+## Running
+
+Open through an HTTP server or GitHub Pages. No build step is needed. Supabase JS 2.117.3 is loaded from jsDelivr with a pinned version and integrity hash. A network connection is required. Local storage holds session information managed by Supabase and the theme; it is not the message database.
+
+Supabase Auth Site URL and allowed redirect: `https://tasukisain1o-cpu.github.io/Nova/`.
+
+## Verification and remaining setup
+
+- JavaScript parsed successfully with Node's VM parser.
+- Browser checks: real library loads, login/registration/recovery screens; mobile registration at 390×844; main navigation, profile/theme, chat text escaping and send behavior with a local-only fixture (never published).
+- Actual database transaction tests: bootstrap, membership isolation, channel publication permissions, blocked dialogs, private follows/media, immutable message identity, anonymous denial; fixtures rolled back. Additional v1.2 tests cover chat list membership isolation and interest normalization/deduplication.
+- Actual end-to-end login and two-user message/media delivery still need testing with user-created accounts. No real password was created by the agent.
+- Supabase's default email delivery is still configured. Set up custom SMTP before inviting general users. Default delivery has recipient/rate restrictions. Keep confirmation enabled. Provider credentials must be entered by the owner, outside repository code.
+- No production push notifications, live broadcasts, audio/video calls, phone/SMS authentication, or owner admin interface yet. Broadcast metadata in the database does not implement a streaming service. No end-to-end encryption is claimed.
+- Feed currently loads the latest 50 posts and Clips the latest 20 videos; older social pagination is future work. Channel publications are made through the feed composer by selecting the channel. Chat messages are a separate data model.
+- Media links are short-lived signed URLs; active pages refresh images and renew paused/failed audio/video URLs. Already-issued links remain usable until expiry.
+- Add server-side rate limits/moderation, storage cleanup for abandoned uploads, backup/restore drills and observability before a broad production release.
+
+This is a connected first version for functional testing, not a claim that every planned NOVA feature is complete.
