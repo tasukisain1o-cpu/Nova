@@ -20,7 +20,7 @@ Applied upgrade order: `database/20261014_nova_v1.sql`, `database/20261014_nova_
 
 All 23 public tables have RLS. Three media buckets are private. The browser contains only the public publishable key. Never add a secret/service-role key to frontend code or GitHub.
 
-The v1.2 invoker RPCs provide an RLS-filtered chat list and atomic replacement of the current user's interests. Realtime is enabled on 12 tables. App admin membership is held in a protected private table and is currently unassigned; GitHub or Supabase ownership does not automatically create an app account.
+The v1.2 invoker RPCs provide an RLS-filtered chat list and atomic replacement of the current user's interests. Realtime is enabled on 12 tables. App admin membership is held in a protected private table and is assigned only to @saintoclub after owner confirmation; GitHub or Supabase ownership does not automatically create an app account.
 
 ## Running
 
