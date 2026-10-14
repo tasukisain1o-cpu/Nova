@@ -1,0 +1,188 @@
+-- Applied to the existing NOVA draft schema. NOT a fresh-project bootstrap.
+-- One-time migration: version 20261014_nova_v1. Already installed on the NOVA project.
+-- Requires existing profiles, nova_groups, group_members, messages, favorites, stories, clips, clip_likes and group RPCs.
+-- NOVA database v1, 2026-10-14. Extends existing schema without deleting data.
+begin;
+create schema if not exists private;
+revoke all on schema private from public, anon;
+grant usage on schema private to authenticated;
+create table public.nova_schema_versions(version text primary key, applied_at timestamptz not null default now());
+alter table public.profiles add column updated_at timestamptz not null default now(), add column is_private boolean not null default false;
+create unique index profiles_username_lower on public.profiles(lower(username));
+create table public.user_settings(user_id uuid primary key references auth.users on delete cascade,theme text not null default 'burgundy' check(theme in ('burgundy','green','bw','blue')),language text not null default 'ru' check(language in ('ru','en')),font_size int not null default 15 check(font_size between 12 and 24),reduced_motion boolean not null default false,notifications boolean not null default true,message_previews boolean not null default true,read_receipts boolean not null default true,last_seen_visibility text not null default 'contacts' check(last_seen_visibility in ('everyone','contacts','nobody')),allow_messages text not null default 'everyone' check(allow_messages in ('everyone','contacts','nobody')),recommendations boolean not null default true,updated_at timestamptz not null default now());
+create table public.user_blocks(user_id uuid references auth.users on delete cascade,blocked_id uuid references auth.users on delete cascade,created_at timestamptz not null default now(),primary key(user_id,blocked_id),check(user_id<>blocked_id));
+create table public.user_follows(user_id uuid references auth.users on delete cascade,followed_id uuid references auth.users on delete cascade,created_at timestamptz not null default now(),primary key(user_id,followed_id),check(user_id<>followed_id));
+create table public.close_friends(user_id uuid references auth.users on delete cascade,friend_id uuid references auth.users on delete cascade,primary key(user_id,friend_id),check(user_id<>friend_id));
+create table public.user_interests(user_id uuid references auth.users on delete cascade,topic text check(length(topic) between 1 and 50),weight real not null default 1 check(weight between 0 and 10),primary key(user_id,topic));
+alter table public.nova_groups add column kind text not null default 'group' check(kind in ('personal','group','channel')),add column description text not null default '' check(length(description)<=1000),add column avatar_path text,add column direct_key text unique,add column updated_at timestamptz not null default now();
+alter table public.group_members add column muted boolean not null default false,add column archived boolean not null default false,add column pinned boolean not null default false,add column last_read_at timestamptz;
+alter table public.messages add column reply_to uuid,add column attachment_path text,add column message_kind text not null default 'text' check(message_kind in ('text','image','video','voice','round','file')),add column client_id uuid not null default gen_random_uuid(),add constraint messages_client_unique unique(sender_id,client_id),add constraint messages_id_group_unique unique(id,group_id),add constraint messages_reply_same_chat foreign key(reply_to,group_id) references public.messages(id,group_id) on delete set null (reply_to),add constraint messages_body_limit check(length(body)<=10000);
+create index messages_chat_time on public.messages(group_id,created_at desc,id desc);
+create index members_user on public.group_members(user_id,group_id);
+create table public.message_reactions(message_id uuid references public.messages on delete cascade,user_id uuid references auth.users on delete cascade,emoji text not null check(length(emoji) between 1 and 16),created_at timestamptz not null default now(),primary key(message_id,user_id,emoji));
+create table public.posts(id uuid primary key default gen_random_uuid(),author_id uuid not null references auth.users on delete cascade,channel_id uuid references public.nova_groups on delete cascade,body text not null default '' check(length(body)<=10000),media_path text,topics text[] not null default '{}' check(cardinality(topics)<=10),visibility text not null default 'public' check(visibility in ('public','followers','private')),created_at timestamptz not null default now(),updated_at timestamptz not null default now(),check(length(btrim(body))>0 or media_path is not null),check(media_path is null or split_part(media_path,'/',1)=author_id::text));
+create index posts_channel_time on public.posts(channel_id,created_at desc);
+create index posts_topics on public.posts using gin(topics);
+create table public.post_likes(post_id uuid references public.posts on delete cascade,user_id uuid references auth.users on delete cascade,created_at timestamptz not null default now(),primary key(post_id,user_id));
+create table public.post_comments(id uuid primary key default gen_random_uuid(),post_id uuid not null references public.posts on delete cascade,user_id uuid not null references auth.users on delete cascade,body text not null check(length(btrim(body)) between 1 and 4000),created_at timestamptz not null default now());
+create index comments_post on public.post_comments(post_id,created_at);
+alter table public.stories add column media_path text,add constraint story_path_owner check(media_path is null or split_part(media_path,'/',1)=user_id::text),add constraint story_text_limit check(length(text_content)<=4000),add constraint story_expiry_limit check(expires_at>created_at and expires_at<=created_at+interval '48 hours');
+alter table public.clips add column media_path text,add column topics text[] not null default '{}' check(cardinality(topics)<=10),add constraint clip_path_owner check(media_path is null or split_part(media_path,'/',1)=user_id::text);
+create table public.story_views(story_id uuid references public.stories on delete cascade,user_id uuid references auth.users on delete cascade,viewed_at timestamptz not null default now(),primary key(story_id,user_id));
+create table public.live_streams(id uuid primary key default gen_random_uuid(),user_id uuid not null references auth.users on delete cascade,title text not null check(length(title) between 1 and 150),status text not null default 'scheduled' check(status in ('scheduled','live','ended')),visibility text not null default 'public' check(visibility in ('public','followers','private')),playback_url text check(playback_url is null or playback_url like 'https://%'),created_at timestamptz not null default now(),ended_at timestamptz);
+create table public.reports(id uuid primary key default gen_random_uuid(),user_id uuid not null references auth.users on delete cascade,entity_type text not null check(entity_type in ('profile','message','post','clip','story','live')),entity_id uuid not null,reason text not null check(length(reason) between 1 and 2000),status text not null default 'open' check(status in ('open','reviewed','resolved')),created_at timestamptz not null default now());
+create table private.app_admins(user_id uuid primary key references auth.users on delete cascade,created_at timestamptz not null default now());
+alter table private.app_admins enable row level security;
+revoke all on private.app_admins from public,anon,authenticated;
+create function private.blocked(a uuid,b uuid) returns boolean language sql stable security definer set search_path='' as $$select exists(select 1 from public.user_blocks where (user_id=a and blocked_id=b) or (user_id=b and blocked_id=a))$$;
+create function private.group_role(g uuid) returns text language sql stable security definer set search_path='' as $$select role from public.group_members where group_id=g and user_id=auth.uid()$$;
+create function private.can_publish(g uuid) returns boolean language sql stable security definer set search_path='' as $$select exists(select 1 from public.nova_groups n join public.group_members m on m.group_id=n.id where n.id=g and m.user_id=auth.uid() and (n.kind<>'channel' or m.role in ('owner','admin')))$$;
+create function private.social_visible(owner_id uuid,audience text) returns boolean language sql stable security definer set search_path='' as $$select auth.uid() is not null and (owner_id=auth.uid() or (not private.blocked(owner_id,auth.uid()) and case audience when 'public' then not coalesce((select is_private from public.profiles where id=owner_id),true) or exists(select 1 from public.user_follows where user_id=auth.uid() and followed_id=owner_id) when 'followers' then exists(select 1 from public.user_follows where user_id=auth.uid() and followed_id=owner_id) when 'close_friends' then exists(select 1 from public.close_friends where user_id=owner_id and friend_id=auth.uid()) else false end))$$;
+create function private.post_visible(p uuid) returns boolean language sql stable security definer set search_path='' as $$select exists(select 1 from public.posts s where s.id=p and case when s.channel_id is null then private.social_visible(s.author_id,s.visibility) else private.is_group_member(s.channel_id) and not private.blocked(s.author_id,auth.uid()) end)$$;
+create function private.clip_visible(c uuid) returns boolean language sql stable security definer set search_path='' as $$select exists(select 1 from public.clips where id=c and private.social_visible(user_id,visibility))$$;
+create function private.is_admin() returns boolean language sql stable security definer set search_path='' as $$select exists(select 1 from private.app_admins where user_id=auth.uid())$$;
+create function private.touch_updated() returns trigger language plpgsql set search_path='' as $$begin new.updated_at=now();return new;end$$;
+create function private.bootstrap_user() returns trigger language plpgsql security definer set search_path='' as $$begin insert into public.profiles(id,username,display_name) values(new.id,'u_'||substr(replace(new.id::text,'-',''),1,22),left(coalesce(nullif(new.raw_user_meta_data->>'display_name',''),'NOVA user'),60)) on conflict(id) do nothing;insert into public.user_settings(user_id) values(new.id) on conflict do nothing;return new;end$$;
+create trigger nova_bootstrap after insert on auth.users for each row execute function private.bootstrap_user();
+insert into public.profiles(id,username) select id,'u_'||substr(replace(id::text,'-',''),1,22) from auth.users on conflict(id) do nothing;
+insert into public.user_settings(user_id) select id from auth.users on conflict do nothing;
+create trigger profiles_touch before update on public.profiles for each row execute function private.touch_updated();
+create trigger settings_touch before update on public.user_settings for each row execute function private.touch_updated();
+create trigger groups_touch before update on public.nova_groups for each row execute function private.touch_updated();
+create trigger posts_touch before update on public.posts for each row execute function private.touch_updated();
+-- No changes to auth emails/phones/passwords here: use Supabase Auth verification flows.
+
+create table public.follow_requests(user_id uuid references auth.users on delete cascade,target_id uuid references auth.users on delete cascade,created_at timestamptz not null default now(),primary key(user_id,target_id),check(user_id<>target_id));
+create function public.nova_follow(p_target uuid) returns text language plpgsql security definer set search_path='' as $$begin if auth.uid() is null or p_target=auth.uid() or private.blocked(auth.uid(),p_target) or not exists(select 1 from public.profiles where id=p_target) then raise exception 'Cannot follow';end if;if (select is_private from public.profiles where id=p_target) then insert into public.follow_requests values(auth.uid(),p_target,now()) on conflict do nothing;return 'requested';end if;insert into public.user_follows values(auth.uid(),p_target,now()) on conflict do nothing;return 'following';end$$;
+create function public.nova_accept_follow(p_user uuid) returns void language plpgsql security definer set search_path='' as $$begin if auth.uid() is null or private.blocked(auth.uid(),p_user) then raise exception 'Not allowed';end if;delete from public.follow_requests where user_id=p_user and target_id=auth.uid();if not found then raise exception 'Request not found';end if;insert into public.user_follows values(p_user,auth.uid(),now()) on conflict do nothing;end$$;
+create function public.nova_create_chat(p_kind text,p_name text,p_private boolean default true) returns uuid language plpgsql security definer set search_path='' as $$declare g uuid;begin if auth.uid() is null or p_kind not in ('group','channel') or length(btrim(p_name)) not between 1 and 80 then raise exception 'Invalid conversation';end if;insert into public.nova_groups(name,created_by,is_private,kind) values(btrim(p_name),auth.uid(),coalesce(p_private,true),p_kind) returning id into g;insert into public.group_members(group_id,user_id,role) values(g,auth.uid(),'owner');return g;end$$;
+create or replace function public.nova_create_group(p_name text,p_is_private boolean default true) returns uuid language sql security definer set search_path='' as $$select public.nova_create_chat('group',p_name,p_is_private)$$;
+create function public.nova_open_direct(p_user uuid) returns uuid language plpgsql security definer set search_path='' as $$declare g uuid;k text;v text;begin if auth.uid() is null or p_user=auth.uid() or not exists(select 1 from public.profiles where id=p_user) or private.blocked(auth.uid(),p_user) then raise exception 'Cannot open direct chat';end if;select allow_messages into v from public.user_settings where user_id=p_user;if v='nobody' or (v='contacts' and not exists(select 1 from public.user_follows where user_id=p_user and followed_id=auth.uid())) then raise exception 'Recipient privacy settings';end if;k=least(auth.uid()::text,p_user::text)||':'||greatest(auth.uid()::text,p_user::text);perform pg_advisory_xact_lock(hashtextextended(k,0));select id into g from public.nova_groups where direct_key=k;if g is not null then return g;end if;insert into public.nova_groups(name,created_by,is_private,kind,direct_key) values('Личный диалог',auth.uid(),true,'personal',k) returning id into g;insert into public.group_members(group_id,user_id,role) values(g,auth.uid(),'owner'),(g,p_user,'member');return g;end$$;
+create or replace function public.nova_join_group(p_invite_code text) returns uuid language plpgsql security definer set search_path='' as $$declare g uuid;begin if auth.uid() is null then raise exception 'Authentication required';end if;select id into g from public.nova_groups where invite_code=btrim(p_invite_code) and kind<>'personal' and not private.blocked(created_by,auth.uid());if g is null then raise exception 'Invalid invitation';end if;insert into public.group_members(group_id,user_id) values(g,auth.uid()) on conflict do nothing;return g;end$$;
+create function public.nova_subscribe(p_channel uuid) returns void language plpgsql security definer set search_path='' as $$begin if auth.uid() is null or not exists(select 1 from public.nova_groups where id=p_channel and kind='channel' and not is_private and not private.blocked(created_by,auth.uid())) then raise exception 'Channel not available';end if;insert into public.group_members(group_id,user_id) values(p_channel,auth.uid()) on conflict do nothing;end$$;
+create function public.nova_manage_member(p_group uuid,p_user uuid,p_role text) returns void language plpgsql security definer set search_path='' as $$begin perform 1 from public.nova_groups where id=p_group and created_by=auth.uid() and kind<>'personal' for update;if not found or p_user=auth.uid() then raise exception 'Owner access required';end if;if p_role='remove' then delete from public.group_members where group_id=p_group and user_id=p_user and role<>'owner';elsif p_role in ('admin','member') then update public.group_members set role=p_role where group_id=p_group and user_id=p_user and role<>'owner';else raise exception 'Invalid role';end if;end$$;
+create function private.message_guard() returns trigger language plpgsql security definer set search_path='' as $$begin if tg_op='UPDATE' then if (new.id,new.group_id,new.sender_id,new.created_at,new.client_id) is distinct from (old.id,old.group_id,old.sender_id,old.created_at,old.client_id) then raise exception 'Message identity is immutable';end if;new.edited_at=now();end if;if new.attachment_path is not null and (split_part(new.attachment_path,'/',1)<>new.group_id::text or split_part(new.attachment_path,'/',2)<>new.sender_id::text) then raise exception 'Invalid attachment path';end if;if exists(select 1 from public.nova_groups where id=new.group_id and kind='personal') and exists(select 1 from public.group_members where group_id=new.group_id and user_id<>new.sender_id and private.blocked(user_id,new.sender_id)) then raise exception 'Messaging blocked';end if;return new;end$$;
+create trigger messages_guard before insert or update on public.messages for each row execute function private.message_guard();
+-- Replace permissive draft policies so they cannot bypass the final rules.
+do $$declare r record;begin for r in select schemaname,tablename,policyname from pg_policies where schemaname='public' loop execute format('drop policy %I on %I.%I',r.policyname,r.schemaname,r.tablename);end loop;end$$;
+create policy profiles_read on public.profiles for select to authenticated using(true);
+create policy profiles_edit on public.profiles for update to authenticated using(id=auth.uid()) with check(id=auth.uid());
+create policy groups_read on public.nova_groups for select to authenticated using(private.is_group_member(id) or (kind='channel' and not is_private and not private.blocked(created_by,auth.uid())));
+create policy groups_edit on public.nova_groups for update to authenticated using(created_by=auth.uid()) with check(created_by=auth.uid());
+create policy groups_delete on public.nova_groups for delete to authenticated using(created_by=auth.uid() and kind<>'personal');
+create policy members_read on public.group_members for select to authenticated using(private.is_group_member(group_id));
+create policy members_prefs on public.group_members for update to authenticated using(user_id=auth.uid()) with check(user_id=auth.uid());
+create policy messages_read on public.messages for select to authenticated using(private.is_group_member(group_id));
+create policy messages_send on public.messages for insert to authenticated with check(sender_id=auth.uid() and private.can_publish(group_id));
+create policy messages_edit on public.messages for update to authenticated using(sender_id=auth.uid() and private.can_publish(group_id)) with check(sender_id=auth.uid() and private.can_publish(group_id));
+create policy messages_remove on public.messages for delete to authenticated using(private.is_group_member(group_id) and (sender_id=auth.uid() or private.group_role(group_id) in ('owner','admin')));
+create policy posts_read on public.posts for select to authenticated using(private.post_visible(id));
+create policy posts_create on public.posts for insert to authenticated with check(author_id=auth.uid() and (channel_id is null or (private.group_role(channel_id) in ('owner','admin') and exists(select 1 from public.nova_groups where id=channel_id and kind='channel'))));
+create policy posts_edit on public.posts for update to authenticated using(author_id=auth.uid() and (channel_id is null or private.group_role(channel_id) in ('owner','admin'))) with check(author_id=auth.uid() and (channel_id is null or private.group_role(channel_id) in ('owner','admin')));
+create policy posts_remove on public.posts for delete to authenticated using(author_id=auth.uid() or private.group_role(channel_id) in ('owner','admin'));
+create policy stories_read on public.stories for select to authenticated using(user_id=auth.uid() or (expires_at>now() and private.social_visible(user_id,audience)));
+create policy stories_create on public.stories for insert to authenticated with check(user_id=auth.uid() and expires_at<=now()+interval '48 hours');
+create policy stories_edit on public.stories for update to authenticated using(user_id=auth.uid()) with check(user_id=auth.uid() and expires_at<=now()+interval '48 hours');
+create policy stories_remove on public.stories for delete to authenticated using(user_id=auth.uid());
+create policy clips_read on public.clips for select to authenticated using(private.clip_visible(id));
+create policy clips_create on public.clips for insert to authenticated with check(user_id=auth.uid());
+create policy clips_edit on public.clips for update to authenticated using(user_id=auth.uid()) with check(user_id=auth.uid());
+create policy clips_remove on public.clips for delete to authenticated using(user_id=auth.uid());
+create policy reactions_read on public.message_reactions for select to authenticated using(exists(select 1 from public.messages where id=message_id));
+create policy reactions_add on public.message_reactions for insert to authenticated with check(user_id=auth.uid() and exists(select 1 from public.messages where id=message_id));
+create policy reactions_remove on public.message_reactions for delete to authenticated using(user_id=auth.uid());
+create policy post_likes_read on public.post_likes for select to authenticated using(private.post_visible(post_id));
+create policy post_likes_add on public.post_likes for insert to authenticated with check(user_id=auth.uid() and private.post_visible(post_id));
+create policy post_likes_remove on public.post_likes for delete to authenticated using(user_id=auth.uid());
+create policy comments_read on public.post_comments for select to authenticated using(private.post_visible(post_id));
+create policy comments_add on public.post_comments for insert to authenticated with check(user_id=auth.uid() and private.post_visible(post_id));
+create policy comments_remove on public.post_comments for delete to authenticated using(user_id=auth.uid());
+create policy clip_likes_read on public.clip_likes for select to authenticated using(private.clip_visible(clip_id));
+create policy clip_likes_add on public.clip_likes for insert to authenticated with check(user_id=auth.uid() and private.clip_visible(clip_id));
+create policy clip_likes_remove on public.clip_likes for delete to authenticated using(user_id=auth.uid());
+create policy story_views_read on public.story_views for select to authenticated using(user_id=auth.uid() or exists(select 1 from public.stories where id=story_id and user_id=auth.uid()));
+create policy story_views_add on public.story_views for insert to authenticated with check(user_id=auth.uid() and exists(select 1 from public.stories where id=story_id and expires_at>now()));
+create policy follows_read on public.user_follows for select to authenticated using(user_id=auth.uid() or followed_id=auth.uid());
+create policy follows_remove on public.user_follows for delete to authenticated using(user_id=auth.uid() or followed_id=auth.uid());
+create policy requests_read on public.follow_requests for select to authenticated using(user_id=auth.uid() or target_id=auth.uid());
+create policy requests_remove on public.follow_requests for delete to authenticated using(user_id=auth.uid() or target_id=auth.uid());
+create policy live_read on public.live_streams for select to authenticated using(private.social_visible(user_id,visibility));
+create policy live_create on public.live_streams for insert to authenticated with check(user_id=auth.uid());
+create policy live_edit on public.live_streams for update to authenticated using(user_id=auth.uid()) with check(user_id=auth.uid());
+create policy live_remove on public.live_streams for delete to authenticated using(user_id=auth.uid());
+create policy reports_read on public.reports for select to authenticated using(user_id=auth.uid() or private.is_admin());
+create policy reports_add on public.reports for insert to authenticated with check(user_id=auth.uid() and status='open');
+create policy reports_moderate on public.reports for update to authenticated using(private.is_admin()) with check(private.is_admin());
+-- Private, per-account records.
+do $$declare t text;begin foreach t in array array['user_settings','user_blocks','close_friends','user_interests','favorites'] loop execute format('create policy owner_all on public.%I for all to authenticated using(user_id=auth.uid()) with check(user_id=auth.uid())',t);end loop;end$$;
+-- Explicit grants: identities and membership roles cannot be rewritten by clients.
+do $$declare t text;begin for t in select tablename from pg_tables where schemaname='public' loop execute format('alter table public.%I enable row level security',t);execute format('revoke all on public.%I from public, anon, authenticated',t);end loop;end$$;
+grant select on public.profiles,public.nova_groups,public.group_members,public.nova_schema_versions to authenticated;
+grant update(username,display_name,avatar_url,cover_url,bio,is_private) on public.profiles to authenticated;
+grant update(name,description,avatar_path,is_private) on public.nova_groups to authenticated;
+grant delete on public.nova_groups to authenticated;
+grant update(muted,archived,pinned,last_read_at) on public.group_members to authenticated;
+grant select,insert,delete on public.messages,public.posts,public.stories,public.clips,public.live_streams to authenticated;
+grant update(body,attachment_url,attachment_type,attachment_path,message_kind) on public.messages to authenticated;
+grant update(body,media_path,topics,visibility) on public.posts to authenticated;
+grant update(media_url,media_type,text_content,audience,media_path) on public.stories to authenticated;
+grant update(video_url,caption,visibility,media_path,topics) on public.clips to authenticated;
+grant update(title,status,visibility,playback_url,ended_at) on public.live_streams to authenticated;
+grant select,insert,delete on public.message_reactions,public.post_likes,public.post_comments,public.clip_likes to authenticated;
+grant select,insert on public.story_views,public.reports to authenticated;
+grant update(status) on public.reports to authenticated;
+grant select,delete on public.user_follows,public.follow_requests to authenticated;
+grant select,insert,update,delete on public.user_settings,public.user_blocks,public.close_friends,public.user_interests,public.favorites to authenticated;
+create policy versions_read on public.nova_schema_versions for select to authenticated using(true);
+
+create table public.notifications(id uuid primary key default gen_random_uuid(),user_id uuid not null references auth.users on delete cascade,message_id uuid references public.messages on delete cascade,post_id uuid references public.posts on delete cascade,created_at timestamptz not null default now(),read_at timestamptz,check(num_nonnulls(message_id,post_id)=1));
+alter table public.notifications enable row level security;
+revoke all on public.notifications from public,anon,authenticated;
+grant select,delete on public.notifications to authenticated;
+grant update(read_at) on public.notifications to authenticated;
+create policy notifications_read on public.notifications for select to authenticated using(user_id=auth.uid());
+create policy notifications_mark on public.notifications for update to authenticated using(user_id=auth.uid()) with check(user_id=auth.uid());
+create policy notifications_remove on public.notifications for delete to authenticated using(user_id=auth.uid());
+create index notifications_user_time on public.notifications(user_id,created_at desc);
+create function private.notify_message() returns trigger language plpgsql security definer set search_path='' as $$begin insert into public.notifications(user_id,message_id) select m.user_id,new.id from public.group_members m join public.user_settings s on s.user_id=m.user_id where m.group_id=new.group_id and m.user_id<>new.sender_id and not m.muted and s.notifications and not private.blocked(m.user_id,new.sender_id);return new;end$$;
+create trigger messages_notify after insert on public.messages for each row execute function private.notify_message();
+create function public.nova_feed(p_before timestamptz default clock_timestamp(),p_limit int default 30,p_recommend boolean default false) returns setof public.posts language sql stable security invoker set search_path='' as $$select p.* from public.posts p where p.created_at<p_before and (p.author_id=auth.uid() or (p.channel_id is not null and exists(select 1 from public.group_members where group_id=p.channel_id and user_id=auth.uid())) or (p.channel_id is null and exists(select 1 from public.user_follows where user_id=auth.uid() and followed_id=p.author_id)) or (p_recommend and p.channel_id is null and coalesce((select recommendations from public.user_settings where user_id=auth.uid()),false) and exists(select 1 from public.user_interests i where i.user_id=auth.uid() and i.topic=any(p.topics)))) order by p.created_at desc,p.id desc limit greatest(1,least(coalesce(p_limit,30),100))$$;
+create function private.chat_media_access(object_name text,writing boolean) returns boolean language plpgsql stable security definer set search_path='' as $$declare g uuid;u uuid;begin g=split_part(object_name,'/',1)::uuid;u=split_part(object_name,'/',2)::uuid;if writing then return u=auth.uid() and private.can_publish(g);end if;return private.is_group_member(g);exception when invalid_text_representation then return false;end$$;
+create function private.social_media_access(object_name text) returns boolean language sql stable security definer set search_path='' as $$select auth.uid() is not null and (split_part(object_name,'/',1)=auth.uid()::text or exists(select 1 from public.posts p where p.media_path=object_name and private.post_visible(p.id)) or exists(select 1 from public.clips c where c.media_path=object_name and private.clip_visible(c.id)) or exists(select 1 from public.stories s where s.media_path=object_name and s.expires_at>now() and private.social_visible(s.user_id,s.audience)))$$;
+insert into storage.buckets(id,name,public,file_size_limit,allowed_mime_types) values
+('nova-avatars','nova-avatars',false,10485760,array['image/jpeg','image/png','image/webp','image/gif']),
+('nova-chat-media','nova-chat-media',false,52428800,array['image/jpeg','image/png','image/webp','image/gif','video/mp4','video/webm','video/quicktime','audio/webm','audio/ogg','audio/mpeg','audio/mp4','audio/wav','application/pdf','text/plain','application/zip','application/octet-stream','application/msword','application/vnd.openxmlformats-officedocument.wordprocessingml.document']),
+('nova-social-media','nova-social-media',false,52428800,array['image/jpeg','image/png','image/webp','image/gif','video/mp4','video/webm','video/quicktime']);
+create policy nova_avatars_read on storage.objects for select to authenticated using(bucket_id='nova-avatars');
+create policy nova_avatars_upload on storage.objects for insert to authenticated with check(bucket_id='nova-avatars' and split_part(name,'/',1)=auth.uid()::text);
+create policy nova_avatars_delete on storage.objects for delete to authenticated using(bucket_id='nova-avatars' and split_part(name,'/',1)=auth.uid()::text);
+create policy nova_chat_read on storage.objects for select to authenticated using(bucket_id='nova-chat-media' and private.chat_media_access(name,false));
+create policy nova_chat_upload on storage.objects for insert to authenticated with check(bucket_id='nova-chat-media' and private.chat_media_access(name,true));
+create policy nova_chat_delete on storage.objects for delete to authenticated using(bucket_id='nova-chat-media' and split_part(name,'/',2)=auth.uid()::text);
+create policy nova_social_read on storage.objects for select to authenticated using(bucket_id='nova-social-media' and private.social_media_access(name));
+create policy nova_social_upload on storage.objects for insert to authenticated with check(bucket_id='nova-social-media' and split_part(name,'/',1)=auth.uid()::text);
+create policy nova_social_delete on storage.objects for delete to authenticated using(bucket_id='nova-social-media' and split_part(name,'/',1)=auth.uid()::text);
+-- Upload immutable random filenames; no overwrites. Short-lived signed URLs only.
+revoke all on all functions in schema private from public,anon,authenticated;
+grant execute on function private.is_group_member(uuid),private.group_role(uuid),private.can_publish(uuid),private.blocked(uuid,uuid),private.social_visible(uuid,text),private.post_visible(uuid),private.clip_visible(uuid),private.is_admin(),private.chat_media_access(text,boolean),private.social_media_access(text) to authenticated;
+revoke all on all functions in schema public from public,anon,authenticated;
+grant execute on function public.nova_create_chat(text,text,boolean),public.nova_create_group(text,boolean),public.nova_open_direct(uuid),public.nova_join_group(text),public.nova_leave_group(uuid),public.nova_transfer_ownership(uuid,uuid),public.nova_subscribe(uuid),public.nova_manage_member(uuid,uuid,text),public.nova_follow(uuid),public.nova_accept_follow(uuid),public.nova_feed(timestamptz,int,boolean) to authenticated;
+-- Realtime respects table RLS. Prefer soft UI refresh on deletes: DELETE payloads may carry only the PK.
+do $$declare t text;begin foreach t in array array['messages','group_members','nova_groups','message_reactions','posts','post_likes','post_comments','stories','story_views','clips','clip_likes','notifications'] loop if not exists(select 1 from pg_publication_tables where pubname='supabase_realtime' and schemaname='public' and tablename=t) then execute format('alter publication supabase_realtime add table public.%I',t);end if;end loop;end$$;
+create index blocks_reverse on public.user_blocks(blocked_id,user_id);
+create index follows_reverse on public.user_follows(followed_id,user_id);
+create index requests_target on public.follow_requests(target_id,user_id);
+create index posts_author_time on public.posts(author_id,created_at desc);
+create index clips_author_time on public.clips(user_id,created_at desc);
+create index stories_author_expiry on public.stories(user_id,expires_at);
+create index reactions_user on public.message_reactions(user_id);
+create index post_likes_user on public.post_likes(user_id);
+create index clip_likes_user on public.clip_likes(user_id);
+create index reports_user on public.reports(user_id,created_at desc);
+
+do $$declare n text;begin for n in select conname from pg_constraint where conrelid='public.messages'::regclass and contype='c' and pg_get_constraintdef(oid) like '%char_length(body)%attachment_url%' loop execute format('alter table public.messages drop constraint %I',n);end loop;end$$;
+alter table public.messages add constraint message_payload_required check(length(btrim(body)) between 1 and 10000 or ((attachment_path is not null or attachment_url is not null) and attachment_type is not null));
+
+insert into public.nova_schema_versions(version) values('20261014_nova_v1');
+commit;
+select 'NOVA v1 installed' as result;
