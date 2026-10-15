@@ -1,5 +1,10 @@
 # NOVA — база данных
 
+## NOVA Clips v1.4 / v1.4.1
+
+Миграции применены; транзакционный test_clips_v1_4.sql прошёл в рабочей базе с откатом всех тестовых данных. Добавлены clip_comments, clip_saves, clip_dismissals (26 public-таблиц с RLS), закрытые private.clip_views и private.clip_conversions. RPC проверяют видимость роликов; расширенная статистика доступна автору. Повторные просмотры одного пользователя не увеличивают счётчик. Подписки через Clip учитываются один раз на пару зритель/автор; отложенное принятие заявки закрытого профиля не атрибутируется.
+
+
 ## Админка v1.3
 
 После v1.2 применена миграция `20261014_nova_v1_3.sql`. Четыре RPC `nova_admin_summary`, `nova_admin_reports`, `nova_admin_resolve`, `nova_admin_audit` проверяют роль в `private.app_admins`. Прямое изменение статуса жалоб клиентом отозвано; переходы записываются в закрытый журнал `private.admin_audit`. Очередь выдаётся по 50 записей с курсором `(created_at,id)`.
@@ -12,7 +17,7 @@
 
 ## Что установлено
 
-23 таблицы в public, RLS на каждой, приватная таблица ролей private.app_admins, три закрытых бакета Storage, подписки Realtime на 12 таблиц.
+26 таблиц в public, RLS на каждой, приватная таблица ролей private.app_admins, три закрытых бакета Storage, подписки Realtime на 12 таблиц.
 
 - Аккаунт: profiles, user_settings. Профиль и настройки создаются автоматически триггером auth.users. Никаких демонстрационных чатов. username уникален без учёта регистра.
 - Переписка: nova_groups (kind personal/group/channel), group_members, messages, message_reactions. Пара пользователей получает один личный диалог. Роли owner/admin/member. В канале пишут только owner/admin. Есть ответы, редактирование, client_id для повторных запросов, типы voice/round/image/video/file.
@@ -135,3 +140,9 @@ rollback;
 select 'PASS: profiles, settings, chats, channel permissions, subscriptions/feed, private follows, blocks, notifications, Storage RLS, role isolation, anon denial. Test data rolled back.' as verification;
 
 ```
+
+## Clips limits and verification
+
+Videos: up to 180 seconds and 50 MB. Files retain original encoding; MP4 H.264 is recommended for compatibility. No paid transcoding, HLS, music catalogue, effects or timeline editing is included. Recommendations use interests, followed authors and liked topics; this is a basic ranking system, not a TikTok-scale model. Watch timing includes server elapsed-time checks but is not a fraud-proof analytics service. Feed uses offset pagination with client deduplication; rankings can move between requests. Replacement covers may leave old files requiring later cleanup.
+
+Database tests passed for visibility, drafts, Storage covers, owner edits, disabled comments, replies/moderation, likes/saves, subscription attribution/deduplication, watch timing and anonymous denial. Local browser tests used synthetic video and an isolated client fixture for playback, cover capture and draft saving. Actual mobile viewport emulation could not be verified in this browser session.
